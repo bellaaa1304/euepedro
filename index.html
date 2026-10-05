@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eaf5ff">
+  <title>Central de Iluminação IoT e Monitoramento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #142943;
+      --muted: #74869a;
+      --line: rgba(115, 151, 184, .18);
+      --blue: #2485e8;
+      --green: #188d6c;
+      --coral: #d66d70;
+      --glass: rgba(255, 255, 255, .76);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      padding: 42px 22px 30px;
+      color: var(--ink);
+      font-family: "DM Sans", sans-serif;
+      background:
+        radial-gradient(ellipse at 12% 10%, rgba(173, 219, 255, .65), transparent 39%),
+        radial-gradient(ellipse at 88% 76%, rgba(197, 231, 255, .62), transparent 38%),
+        linear-gradient(135deg, #eaf6ff 0%, #f6fbff 52%, #edf7ff 100%);
+    }
+
+    button, input { font: inherit; }
+    .shell { width: min(100%, 920px); margin: 0 auto; }
+    .topline { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 4px 18px; }
+    .brand-mark {
+      display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center;
+      color: #2678c7; background: rgba(255,255,255,.72); border: 1px solid rgba(255,255,255,.9);
+      border-radius: 14px; box-shadow: 0 8px 24px rgba(69, 128, 177, .12); font-size: 17px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .eyebrow { margin: 0 0 3px; color: #63809c; font-size: 10px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; }
+    h1 { margin: 0; font-family: Manrope, sans-serif; font-size: clamp(17px, 3vw, 21px); font-weight: 800; letter-spacing: 0; }
+    .network-pill { display: inline-flex; align-items: center; gap: 9px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.64); color: #667c90; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .network-dot { width: 8px; height: 8px; border-radius: 50%; background: #edb84b; box-shadow: 0 0 0 4px rgba(237,184,75,.14); animation: blink 1.4s ease-in-out infinite; }
+    .network-pill.online { color: #187957; border-color: rgba(36,159,115,.2); background: rgba(234,250,243,.8); }
+    .network-pill.online .network-dot { background: #20b17c; box-shadow: 0 0 0 4px rgba(32,177,124,.12), 0 0 13px rgba(32,177,124,.45); animation: none; }
+    .network-pill.offline { color: #b54d56; border-color: rgba(206,103,110,.22); background: rgba(255,244,244,.82); }
+    .network-pill.offline .network-dot { background: #dc6d73; box-shadow: 0 0 0 4px rgba(220,109,115,.12); animation: none; }
+
+    .dashboard {
+      overflow: hidden; padding: 30px 34px 24px; border: 1px solid rgba(255,255,255,.92); border-radius: 24px;
+      background: var(--glass); box-shadow: 0 26px 70px rgba(69, 116, 154, .15), 0 3px 10px rgba(73, 126, 168, .05);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: arrive .55s cubic-bezier(.2,.75,.3,1) both;
+    }
+    .intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 23px; border-bottom: 1px solid var(--line); }
+    h2 { margin: 0 0 6px; font-family: Manrope, sans-serif; font-size: 18px; font-weight: 800; }
+    .intro p { margin: 0; color: var(--muted); font-size: 13px; }
+    .channel-count { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 9px; background: #edf6fd; color: #577d9e; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .topic-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 18px 0 20px; }
+    .topic-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: #eff7ff; color: #4b86bd; }
+    .topic-label { display: block; margin-bottom: 5px; color: #597087; font-size: 11px; font-weight: 700; }
+    .topic-input { width: 100%; padding: 0; border: 0; outline: 0; color: #294761; background: transparent; font-size: 13px; font-weight: 600; }
+    .topic-input:focus { box-shadow: 0 1px 0 #76b3e7; }
+    .topic-state { display: inline-flex; align-items: center; gap: 6px; color: #8293a2; font-size: 10px; white-space: nowrap; }
+    .topic-state i { font-size: 9px; }
+
+    /* ESTILOS DO VISOR DO POTENCIÔMETRO */
+    .pot-section {
+      margin-bottom: 24px; padding: 18px 20px; border: 1px solid rgba(137,169,195,.22);
+      border-radius: 16px; background: rgba(255,255,255,.63);
+    }
+    .pot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .pot-title { font-family: Manrope, sans-serif; font-size: 13px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+    .pot-readout { font-family: Manrope, sans-serif; font-size: 14px; font-weight: 800; color: #2485e8; }
+    .pot-bar-bg { width: 100%; height: 12px; background: #e2edf7; border-radius: 999px; overflow: hidden; position: relative; }
+    .pot-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #2485e8, #20b17c); border-radius: 999px; transition: width .25s ease-out; }
+    .pot-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; font-weight: 700; color: #8193a3; }
+
+    .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 14px; }
+    .section-heading h3 { margin: 0; font-family: Manrope, sans-serif; font-size: 13px; font-weight: 800; }
+    .section-heading span { color: #8899a9; font-size: 11px; }
+    .led-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 13px; }
+    .led-card {
+      min-width: 0; padding: 19px 16px 15px; border: 1px solid rgba(137,169,195,.2); border-radius: 16px;
+      background: rgba(255,255,255,.63); animation: arrive .5s both;
+    }
+    .led-card:nth-child(2) { animation-delay: .08s; }
+    .led-card:nth-child(3) { animation-delay: .16s; }
+    .led-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .led-name { color: #5f7489; font-size: 11px; font-weight: 700; }
+    .pin-tag { padding: 4px 7px; border-radius: 6px; color: #8193a3; background: #f0f5f8; font-size: 10px; font-weight: 700; }
+    .lamp-wrap { display: grid; min-height: 110px; place-items: center; }
+    .lamp {
+      width: 62px; aspect-ratio: 1; border: 1px solid rgba(123,151,171,.12); border-radius: 50%;
+      background: radial-gradient(circle at 36% 31%, #d5dee5, #aebbc7 72%); box-shadow: inset 0 2px 5px rgba(34,61,81,.13), 0 7px 13px rgba(62,90,111,.11);
+      transition: background .35s ease, box-shadow .35s ease, transform .35s ease;
+    }
+    .led-card.active .lamp {
+      border-color: rgba(47,199,255,.75); background: radial-gradient(circle at 35% 30%, #fff 0, #8df3ff 17%, #1bbdff 50%, #1682ef 100%);
+      box-shadow: 0 0 12px rgba(57,220,255,.95), 0 0 29px rgba(20,169,255,.82), 0 0 54px rgba(42,116,255,.45), inset 0 0 13px rgba(255,255,255,.82);
+      animation: glow 2s ease-in-out infinite;
+    }
+    .led-state { margin: -1px 0 15px; color: #8493a0; text-align: center; font-size: 11px; font-weight: 600; transition: color .25s; }
+    .led-card.active .led-state { color: #1687c8; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .action {
+      min-width: 0; min-height: 38px; border: 0; border-radius: 9px; color: white; font-size: 10px; font-weight: 800;
+      letter-spacing: .3px; cursor: pointer; transition: transform .16s ease, filter .16s ease, box-shadow .16s ease, opacity .16s ease;
+    }
+    .action:hover:not(:disabled) { filter: brightness(1.05); box-shadow: 0 5px 12px rgba(48,93,120,.13); }
+    .action:active:not(:disabled) { transform: scale(.95); }
+    .action:disabled { cursor: not-allowed; opacity: .42; }
+    .turn-on { background: linear-gradient(135deg,#29a882,#198968); }
+    .turn-off { background: linear-gradient(135deg,#dc8583,#c8696e); }
+    .action i { margin-right: 5px; font-size: 9px; }
+    .general-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: -3px 0 14px; }
+    .global-action { min-height: 40px; font-size: 11px; }
+    .footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; color: #8a9aaa; font-size: 10px; }
+    .footer span { display: inline-flex; align-items: center; gap: 7px; }
+    .footer i { color: #77a6cc; }
+
+    @keyframes blink { 50% { opacity: .45; transform: scale(.88); } }
+    @keyframes glow { 50% { filter: brightness(1.13); transform: scale(1.035); } }
+    @keyframes arrive { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 650px) {
+      body { padding: 24px 14px; }
+      .dashboard { padding: 23px 18px 19px; border-radius: 20px; }
+      .led-grid { grid-template-columns: 1fr; gap: 10px; }
+      .led-card { display: grid; grid-template-columns: minmax(75px,.7fr) minmax(90px,.9fr) minmax(124px,1.1fr); align-items: center; gap: 10px; padding: 12px; }
+      .led-head { display: grid; justify-content: start; gap: 5px; }
+      .lamp-wrap { min-height: 58px; }
+      .lamp { width: 44px; }
+      .led-state { margin: 0; text-align: left; }
+      .actions { grid-column: 1 / -1; }
+      .action { min-height: 36px; }
+      .topic-row { grid-template-columns: auto minmax(0,1fr); gap: 10px; }
+      .topic-state { grid-column: 2; margin-top: -6px; }
+      .intro { align-items: center; }
+      .channel-count { font-size: 0; gap: 0; width: 30px; height: 30px; justify-content: center; }
+      .channel-count i { font-size: 11px; }
+    }
+    @media (max-width: 390px) {
+      body { padding-inline: 10px; }
+      .dashboard { padding-inline: 13px; }
+      .led-card { grid-template-columns: 58px 48px minmax(0,1fr); gap: 7px; }
+      .actions { gap: 6px; }
+      .action { font-size: 9px; }
+      .network-pill { padding: 8px 10px; font-size: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topline">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><i class="fa-solid fa-lightbulb"></i></div>
+        <div>
+          <p class="eyebrow">Painel de controle</p>
+          <h1>Central de Iluminação IoT</h1>
+        </div>
+      </div>
+      <div class="network-pill" id="networkPill" role="status" aria-live="polite">
+        <span class="network-dot" aria-hidden="true"></span><span id="networkLabel">Sincronizando...</span>
+      </div>
+    </header>
+
+    <section class="dashboard" aria-label="Controle de iluminação">
+      <div class="intro">
+        <div>
+          <h2>Seus canais</h2>
+          <p>Controle de Hardware · 3 canais + Potenciômetro</p>
+        </div>
+        <span class="channel-count"><i class="fa-solid fa-microchip" aria-hidden="true"></i> Portas 13, 12, 8, A0</span>
+      </div>
+
+      <div class="topic-row">
+        <span class="topic-icon" aria-hidden="true"><i class="fa-solid fa-tower-broadcast"></i></span>
+        <label>
+          <span class="topic-label">Tópico MQTT</span>
+          <input class="topic-input" id="topicInput" type="text" spellcheck="false" autocomplete="off" aria-label="Tópico MQTT" value="gerry_sanchez_led_exclusivo/arduino">
+        </label>
+        <span class="topic-state" id="topicState" aria-live="polite"><i class="fa-solid fa-circle"></i><span>Aguardando conexão</span></span>
+      </div>
+
+      <!-- VISOR DA ENTRADA ANALÓGICA DO POTENCIÔMETRO -->
+      <div class="pot-section">
+        <div class="pot-header">
+          <span class="pot-title"><i class="fa-solid fa-sliders"></i> Potenciômetro (Entrada A0)</span>
+          <span class="pot-readout" id="potVal">0 (0%)</span>
+        </div>
+        <div class="pot-bar-bg">
+          <div class="pot-bar-fill" id="potBar"></div>
+        </div>
+        <div class="pot-meta">
+          <span>Min: 0</span>
+          <span>Max: 1023</span>
+        </div>
+      </div>
+
+      <div class="section-heading">
+        <h3>Iluminação</h3>
+        <span>Estado confirmado pelo dispositivo</span>
+      </div>
+      <div class="general-actions" aria-label="Controles gerais">
+        <button class="action global-action turn-on" type="button" data-commands="11,21,31" disabled><i class="fa-solid fa-bolt" aria-hidden="true"></i>LIGAR TODOS</button>
+        <button class="action global-action turn-off" type="button" data-commands="10,20,30" disabled><i class="fa-solid fa-power-off" aria-hidden="true"></i>DESLIGAR TODOS</button>
+      </div>
+
+      <div class="led-grid">
+        <article class="led-card" data-led="1">
+          <div class="led-head"><span class="led-name">LED 1</span><span class="pin-tag">PIN 13</span></div>
+          <div class="lamp-wrap"><div class="lamp" aria-hidden="true"></div></div>
+          <p class="led-state" aria-live="polite">LED 1 Inativo</p>
+          <div class="actions">
+            <button class="action turn-on" type="button" data-command="11" disabled><i class="fa-solid fa-power-off" aria-hidden="true"></i>LIGAR</button>
+            <button class="action turn-off" type="button" data-command="10" disabled><i class="fa-regular fa-circle" aria-hidden="true"></i>DESLIGAR</button>
+          </div>
+        </article>
+        <article class="led-card" data-led="2">
+          <div class="led-head"><span class="led-name">LED 2</span><span class="pin-tag">PIN 12</span></div>
+          <div class="lamp-wrap"><div class="lamp" aria-hidden="true"></div></div>
+          <p class="led-state" aria-live="polite">LED 2 Inativo</p>
+          <div class="actions">
+            <button class="action turn-on" type="button" data-command="21" disabled><i class="fa-solid fa-power-off" aria-hidden="true"></i>LIGAR</button>
+            <button class="action turn-off" type="button" data-command="20" disabled><i class="fa-regular fa-circle" aria-hidden="true"></i>DESLIGAR</button>
+          </div>
+        </article>
+        <article class="led-card" data-led="3">
+          <div class="led-head"><span class="led-name">LED 3</span><span class="pin-tag">PIN 8</span></div>
+          <div class="lamp-wrap"><div class="lamp" aria-hidden="true"></div></div>
+          <p class="led-state" aria-live="polite">LED 3 Inativo</p>
+          <div class="actions">
+            <button class="action turn-on" type="button" data-command="31" disabled><i class="fa-solid fa-power-off" aria-hidden="true"></i>LIGAR</button>
+            <button class="action turn-off" type="button" data-command="30" disabled><i class="fa-regular fa-circle" aria-hidden="true"></i>DESLIGAR</button>
+          </div>
+        </article>
+      </div>
+
+      <footer class="footer">
+        <span><i class="fa-solid fa-lock" aria-hidden="true"></i> Conexão protegida por SSL</span>
+        <span id="brokerLabel">broker.hivemq.com</span>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const broker = "broker.hivemq.com";
+      const port = 8884;
+      const clientId = "web_led_" + Math.random().toString(16).slice(2, 10) + "_" + Date.now().toString(16);
+      const networkPill = document.getElementById("networkPill");
+      const networkLabel = document.getElementById("networkLabel");
+      const topicInput = document.getElementById("topicInput");
+      const topicState = document.getElementById("topicState");
+      const potVal = document.getElementById("potVal");
+      const potBar = document.getElementById("potBar");
+      const buttons = [...document.querySelectorAll(".action")];
+      const cards = [...document.querySelectorAll(".led-card")];
+      let client;
+      let subscribedTopic = "";
+      let topicTimer;
+      let retryTimer;
+      let connecting = false;
+
+      function setNetwork(state, label) {
+        networkPill.classList.remove("online", "offline");
+        if (state) networkPill.classList.add(state);
+        networkLabel.textContent = label;
+        buttons.forEach(button => { button.disabled = state !== "online" || subscribedTopic !== topicInput.value.trim(); });
+      }
+
+      function setTopicState(label, iconClass) {
+        topicState.querySelector("span").textContent = label;
+        topicState.querySelector("i").className = iconClass;
+      }
+
+      function syncTopic() {
+        const nextTopic = topicInput.value.trim();
+        if (!client || !client.isConnected()) {
+          setTopicState("Aguardando conexão", "fa-solid fa-circle");
+          return;
+        }
+        if (!nextTopic) {
+          const previousTopic = subscribedTopic;
+          subscribedTopic = "";
+          buttons.forEach(button => { button.disabled = true; });
+          setTopicState("Informe um tópico", "fa-solid fa-triangle-exclamation");
+          if (previousTopic) client.unsubscribe(previousTopic);
+          return;
+        }
+        if (nextTopic === subscribedTopic) return;
+        buttons.forEach(button => { button.disabled = true; });
+        setTopicState("Atualizando tópico...", "fa-solid fa-arrows-rotate fa-spin");
+        const subscribeNext = () => {
+          if (!client.isConnected()) return;
+          const currentTopic = topicInput.value.trim();
+          if (currentTopic !== nextTopic) {
+            syncTopic();
+            return;
+          }
+          client.subscribe(nextTopic, {
+            qos: 0,
+            onSuccess: () => {
+              subscribedTopic = nextTopic;
+              setTopicState("Inscrito no tópico", "fa-solid fa-circle-check");
+              setNetwork("online", "Sistema Online");
+            },
+            onFailure: () => {
+              subscribedTopic = "";
+              buttons.forEach(button => { button.disabled = true; });
+              setTopicState("Falha ao assinar", "fa-solid fa-triangle-exclamation");
+            }
+          });
+        };
+        if (subscribedTopic) {
+          const previousTopic = subscribedTopic;
+          subscribedTopic = "";
+          client.unsubscribe(previousTopic, { onSuccess: subscribeNext, onFailure: subscribeNext });
+        } else {
+          subscribeNext();
+        }
+      }
+
+      function connect() {
+        if (connecting || (client && client.isConnected())) return;
+        connecting = true;
+        setNetwork(null, "Sincronizando...");
+        try {
+          client = new Paho.MQTT.Client(broker, port, "/mqtt", clientId);
+          client.onConnectionLost = response => {
+            connecting = false;
+            subscribedTopic = "";
+            buttons.forEach(button => { button.disabled = true; });
+            setNetwork("offline", "Sistema Offline");
+            setTopicState("Reconectando...", "fa-solid fa-arrows-rotate");
+            if (response && response.errorCode !== 0) console.warn("Conexão MQTT perdida:", response.errorMessage);
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(connect, 2500);
+          };
+          client.onMessageArrived = message => {
+            const command = message.payloadString.trim();
+
+            // LEITURA DO POTENCIÔMETRO (Mensagens prefixadas com "POT:" ex: "POT:512")
+            if (command.startsWith("POT:")) {
+              const rawVal = parseInt(command.replace("POT:", ""), 10);
+              if (!isNaN(rawVal)) {
+                const clampedVal = Math.max(0, Math.min(1023, rawVal));
+                const percentage = Math.round((clampedVal / 1023) * 100);
+                potVal.textContent = `${clampedVal} (${percentage}%)`;
+                potBar.style.width = `${percentage}%`;
+              }
+              return;
+            }
+
+            // COMANDOS DOS LEDS
+            const ledIndex = ({ "11": 0, "10": 0, "21": 1, "20": 1, "31": 2, "30": 2 })[command];
+            if (ledIndex === undefined) return;
+            const card = cards[ledIndex];
+            const isOn = command.endsWith("1");
+            card.classList.toggle("active", isOn);
+            card.querySelector(".led-state").textContent = `LED ${ledIndex + 1} ${isOn ? "Ativo" : "Inativo"}`;
+          };
+          client.connect({
+            useSSL: true,
+            timeout: 8,
+            keepAliveInterval: 30,
+            cleanSession: true,
+            onSuccess: () => {
+              connecting = false;
+              setNetwork("online", "Sistema Online");
+              syncTopic();
+            },
+            onFailure: error => {
+              connecting = false;
+              setNetwork("offline", "Sistema Offline");
+              setTopicState("Nova tentativa em instantes", "fa-solid fa-circle-exclamation");
+              console.warn("Falha ao conectar ao broker MQTT:", error.errorMessage);
+              clearTimeout(retryTimer);
+              retryTimer = setTimeout(connect, 3500);
+            }
+          });
+        } catch (error) {
+          connecting = false;
+          setNetwork("offline", "Sistema Offline");
+          setTopicState("Broker indisponível", "fa-solid fa-circle-exclamation");
+          console.error("Não foi possível iniciar o cliente MQTT:", error);
+          clearTimeout(retryTimer);
+          retryTimer = setTimeout(connect, 3500);
+        }
+      }
+
+      topicInput.addEventListener("input", () => {
+        clearTimeout(topicTimer);
+        buttons.forEach(button => { button.disabled = true; });
+        setTopicState("Aguardando alteração...", "fa-solid fa-pen");
+        topicTimer = setTimeout(syncTopic, 500);
+      });
+
+      buttons.forEach(button => {
+        button.addEventListener("click", () => {
+          if (!client || !client.isConnected() || !subscribedTopic || subscribedTopic !== topicInput.value.trim()) return;
+          const commands = button.dataset.commands ? button.dataset.commands.split(",") : [button.dataset.command];
+          commands.forEach(command => client.send(subscribedTopic, command, 0, false));
+        });
+      });
+
+      if (typeof Paho === "undefined") {
+        setNetwork("offline", "Biblioteca indisponível");
+        setTopicState("Não foi possível carregar MQTT", "fa-solid fa-circle-exclamation");
+      } else {
+        connect();
+      }
+    })();
+  </script>
+</body>
+</html>
