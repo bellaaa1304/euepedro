@@ -72,7 +72,7 @@
     .topic-state { display: inline-flex; align-items: center; gap: 6px; color: #8293a2; font-size: 10px; white-space: nowrap; }
     .topic-state i { font-size: 9px; }
 
-    /* ESTILOS DO VISOR DO POTENCIÔMETRO */
+    /* VISOR DO POTENCIÔMETRO */
     .pot-section {
       margin-bottom: 24px; padding: 18px 20px; border: 1px solid rgba(137,169,195,.22);
       border-radius: 16px; background: rgba(255,255,255,.63);
@@ -130,34 +130,6 @@
     @keyframes blink { 50% { opacity: .45; transform: scale(.88); } }
     @keyframes glow { 50% { filter: brightness(1.13); transform: scale(1.035); } }
     @keyframes arrive { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
-    @media (max-width: 650px) {
-      body { padding: 24px 14px; }
-      .dashboard { padding: 23px 18px 19px; border-radius: 20px; }
-      .led-grid { grid-template-columns: 1fr; gap: 10px; }
-      .led-card { display: grid; grid-template-columns: minmax(75px,.7fr) minmax(90px,.9fr) minmax(124px,1.1fr); align-items: center; gap: 10px; padding: 12px; }
-      .led-head { display: grid; justify-content: start; gap: 5px; }
-      .lamp-wrap { min-height: 58px; }
-      .lamp { width: 44px; }
-      .led-state { margin: 0; text-align: left; }
-      .actions { grid-column: 1 / -1; }
-      .action { min-height: 36px; }
-      .topic-row { grid-template-columns: auto minmax(0,1fr); gap: 10px; }
-      .topic-state { grid-column: 2; margin-top: -6px; }
-      .intro { align-items: center; }
-      .channel-count { font-size: 0; gap: 0; width: 30px; height: 30px; justify-content: center; }
-      .channel-count i { font-size: 11px; }
-    }
-    @media (max-width: 390px) {
-      body { padding-inline: 10px; }
-      .dashboard { padding-inline: 13px; }
-      .led-card { grid-template-columns: 58px 48px minmax(0,1fr); gap: 7px; }
-      .actions { gap: 6px; }
-      .action { font-size: 9px; }
-      .network-pill { padding: 8px 10px; font-size: 10px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-    }
   </style>
 </head>
 <body>
@@ -273,6 +245,15 @@
       let retryTimer;
       let connecting = false;
 
+      function updatePotUI(rawVal) {
+        if (!isNaN(rawVal)) {
+          const clampedVal = Math.max(0, Math.min(1023, rawVal));
+          const percentage = Math.round((clampedVal / 1023) * 100);
+          potVal.textContent = `${clampedVal} (${percentage}%)`;
+          potBar.style.width = `${percentage}%`;
+        }
+      }
+
       function setNetwork(state, label) {
         networkPill.classList.remove("online", "offline");
         if (state) networkPill.classList.add(state);
@@ -351,15 +332,13 @@
           client.onMessageArrived = message => {
             const command = message.payloadString.trim();
 
-            // LEITURA DO POTENCIÔMETRO (Mensagens prefixadas com "POT:" ex: "POT:512")
+            // LEITURA DO POTENCIÔMETRO (Aceita formato "POT:512" ou número puro "512")
             if (command.startsWith("POT:")) {
               const rawVal = parseInt(command.replace("POT:", ""), 10);
-              if (!isNaN(rawVal)) {
-                const clampedVal = Math.max(0, Math.min(1023, rawVal));
-                const percentage = Math.round((clampedVal / 1023) * 100);
-                potVal.textContent = `${clampedVal} (${percentage}%)`;
-                potBar.style.width = `${percentage}%`;
-              }
+              updatePotUI(rawVal);
+              return;
+            } else if (!isNaN(parseInt(command, 10)) && parseInt(command, 10) >= 0 && parseInt(command, 10) <= 1023 && command.length > 2) {
+              updatePotUI(parseInt(command, 10));
               return;
             }
 
